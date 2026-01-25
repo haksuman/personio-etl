@@ -1,0 +1,10 @@
+export:
+  output_path: ./output
+  include_documents: true
+
+schedule:
+  enabled: true
+  cron: "0 2 * * *"
+
+logging:
+  level: INFO
