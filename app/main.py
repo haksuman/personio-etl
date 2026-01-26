@@ -58,11 +58,22 @@ def run_etl_job():
             logger.info("Starting document downloads...")
             downloader = DocumentDownloader(client, config.export.output_path)
             for i, emp in enumerate(raw_employees):
-                emp_id = emp.get("attributes", {}).get("id", {}).get("value")
+                # Check different possible ID locations in the employee object
+                emp_id = (
+                    emp.get("attributes", {}).get("id", {}).get("value") or 
+                    emp.get("id") or 
+                    emp.get("attributes", {}).get("id")
+                )
+                
                 if emp_id:
                     logger.info(f"Processing documents for employee {emp_id} ({i+1}/{len(raw_employees)})...")
                     doc_metadata = extractor.fetch_document_categories(emp_id)
-                    downloader.download_for_employee(emp_id, doc_metadata)
+                    if doc_metadata:
+                        downloader.download_for_employee(emp_id, doc_metadata)
+                    else:
+                        logger.debug(f"No document metadata returned for employee {emp_id}")
+                else:
+                    logger.warning(f"Could not extract ID for employee at index {i}: {emp.get('type')}")
         
         logger.info("--- Personio ETL Job Completed Successfully ---")
         

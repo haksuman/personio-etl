@@ -48,24 +48,29 @@ class PersonioClient:
         if not self.token or time.time() >= self.token_expires_at:
             self._authenticate()
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self, accept: str = "application/json") -> Dict[str, str]:
         self._ensure_token()
         return {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json"
+            "Accept": accept
         }
 
     def request(self, method: str, endpoint: str, params: Optional[Dict] = None, 
-                json_data: Optional[Dict] = None, retries: int = 3) -> Dict[str, Any]:
+                json_data: Optional[Dict] = None, retries: int = 3,
+                accept: str = "application/json") -> Dict[str, Any]:
         """Generic request method with retry logic and rate-limit awareness."""
-        url = f"{self.base_url}/v1/{endpoint.lstrip('/')}"
+        endpoint = endpoint.lstrip('/')
+        if not (endpoint.startswith('v1/') or endpoint.startswith('v2/')):
+            url = f"{self.base_url}/v1/{endpoint}"
+        else:
+            url = f"{self.base_url}/{endpoint}"
         
         for attempt in range(retries):
             try:
                 response = self.session.request(
                     method, 
                     url, 
-                    headers=self._get_headers(), 
+                    headers=self._get_headers(accept=accept), 
                     params=params, 
                     json=json_data,
                     timeout=30
@@ -115,7 +120,8 @@ class PersonioClient:
             response_data = self.request("GET", endpoint, params=current_params)
             
             # Personio API structure: {"success": True, "metadata": {...}, "data": [...]}
-            data_list = response_data.get("data", [])
+            # V2 API often uses _data and _meta
+            data_list = response_data.get("data") or response_data.get("_data") or []
             
             if not data_list:
                 logger.debug(f"No more data for {endpoint} at page {page_count}.")
@@ -129,7 +135,7 @@ class PersonioClient:
                 
             all_data.extend(data_list)
             
-            metadata = response_data.get("metadata", {})
+            metadata = response_data.get("metadata") or response_data.get("_meta") or {}
             total_pages = metadata.get("total_pages", 1)
             current_page = metadata.get("current_page", 1)
             
@@ -155,17 +161,44 @@ class PersonioClient:
             
         return all_data
 
-    def download_file(self, endpoint: str, save_path: str):
+    def download_file(self, endpoint: str, save_path: str, accept: str = "*/*"):
         """Special method for binary data downloads."""
-        url = f"{self.base_url}/v1/{endpoint.lstrip('/')}"
+        endpoint = endpoint.lstrip('/')
+        if not (endpoint.startswith('v1/') or endpoint.startswith('v2/')):
+            url = f"{self.base_url}/v1/{endpoint}"
+        else:
+            url = f"{self.base_url}/{endpoint}"
+            
         try:
-            response = self.session.get(url, headers=self._get_headers(), stream=True, timeout=60)
+            headers = self._get_headers(accept=accept)
+            logger.debug(f"Downloading file from {url} with headers: {headers}")
+            response = self.session.get(url, headers=headers, stream=True, timeout=60)
+            
+            # Log response info for debugging
+            logger.debug(f"Download response status: {response.status_code}")
+            logger.debug(f"Download response headers: {response.headers}")
+            
             response.raise_for_status()
             
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            # Ensure the directory exists before writing
+            save_dir = os.path.dirname(save_path)
+            if not os.path.exists(save_dir):
+                logger.info(f"Creating directory: {save_dir}")
+                os.makedirs(save_dir, exist_ok=True)
+            
+            logger.info(f"Writing binary data to: {save_path}")
             with open(save_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    if chunk:
+                        f.write(chunk)
+            
+            # Verify file was written
+            if os.path.exists(save_path):
+                file_size = os.path.getsize(save_path)
+                logger.info(f"Successfully saved {file_size} bytes to {save_path}")
+            else:
+                logger.error(f"File was not found after write attempt: {save_path}")
+                
         except Exception as e:
             logger.error(f"Failed to download file from {url}: {e}")
             raise APIError(f"File download failed: {e}")

@@ -34,11 +34,25 @@ class PersonioExtractor:
             return {}
 
     def fetch_document_categories(self, employee_id: int) -> List[Dict[str, Any]]:
-        """Fetches document categories/metadata for an employee."""
-        logger.debug(f"Fetching document metadata for employee {employee_id}...")
+        """Fetches document metadata for an employee using V2 API."""
+        logger.debug(f"Fetching document metadata for employee {employee_id} using V2 API...")
         try:
-            response = self.client.request("GET", f"company/employees/{employee_id}/documents")
-            return response.get("data", [])
+            # V2 Document Management API uses owner_id to filter by employee
+            params = {"owner_id": employee_id}
+            response = self.client.request("GET", "v2/document-management/documents", params=params)
+            
+            # Personio API can sometimes wrap data in another layer or use pagination metadata
+            data = response.get("_data", [])
+            
+            # Debug: log the response keys
+            logger.debug(f"V2 Document Metadata response keys: {list(response.keys())}")
+            
+            if not data and "success" in response and response.get("success") is False:
+                logger.error(f"API returned success=False for documents of employee {employee_id}")
+                return []
+
+            logger.info(f"Fetched metadata for {len(data)} documents for employee {employee_id}")
+            return data
         except Exception as e:
-            logger.warning(f"Failed to fetch documents for employee {employee_id}: {e}")
+            logger.warning(f"Failed to fetch documents for employee {employee_id} via V2: {e}")
             return []

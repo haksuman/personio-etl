@@ -48,13 +48,14 @@ Create a `.env` file from `.env.example`:
 PERSONIO_CLIENT_ID=your_client_id
 PERSONIO_CLIENT_SECRET=your_client_secret
 PERSONIO_BASE_URL=https://api.personio.de
+EXPORT_OUTPUT_PATH=./output
 ```
 
 ### 2. Application Config (`config.yml`)
 
 ```yaml
 export:
-  output_path: ./output
+  output_path: ./output  # Overridden by EXPORT_OUTPUT_PATH if set
   include_documents: true
 
 schedule:

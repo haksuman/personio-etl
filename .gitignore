@@ -10,3 +10,4 @@ env.bak/
 venv.bak/
 output/
 .cursor/
+CodeSpecs.md
