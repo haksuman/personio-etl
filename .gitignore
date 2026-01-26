@@ -12,3 +12,4 @@ output/
 .cursor/
 CodeSpecs.md
 employees_example_output.json
+logs/
